@@ -3,6 +3,7 @@ import '../models/post_model.dart';
 import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import 'create_post_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -67,6 +68,15 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Community Issues'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+          ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _signOut),
         ],
       ),
