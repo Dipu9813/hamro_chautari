@@ -7,6 +7,7 @@ class PostModel {
   final String description;
   final String location;
   final String? tagId;
+  final String? imageUrl;
   final int likes;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -25,6 +26,7 @@ class PostModel {
     required this.description,
     required this.location,
     this.tagId,
+    this.imageUrl,
     this.likes = 0,
     required this.createdAt,
     this.updatedAt,
@@ -46,6 +48,7 @@ class PostModel {
       description: json['description'] as String,
       location: json['location'] as String,
       tagId: json['tag_id'] as String?,
+      imageUrl: json['image_url'] as String?,
       likes: json['likes'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: json['updated_at'] != null
@@ -65,6 +68,7 @@ class PostModel {
       'description': description,
       'location': location,
       'tag_id': tagId,
+      'image_url': imageUrl,
       'likes': likes,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),

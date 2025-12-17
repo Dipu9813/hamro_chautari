@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import '../services/tag_service.dart';
 import '../models/tag_model.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key});
+  final File? selectedImage;
+
+  const CreatePostScreen({super.key, this.selectedImage});
 
   @override
   State<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -20,16 +24,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final PostService _postService = PostService();
   final AuthService _authService = AuthService();
   final TagService _tagService = TagService();
+  final ImagePicker _picker = ImagePicker();
 
   String? _selectedTagId;
   bool _isLoading = false;
   bool _isLoadingTags = true;
+  File? _selectedImage;
 
   List<TagModel> _availableTags = [];
 
   @override
   void initState() {
     super.initState();
+    _selectedImage = widget.selectedImage;
     _loadTags();
   }
 
@@ -64,6 +71,30 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+      }
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
+    });
+  }
+
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -95,6 +126,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         description: _descriptionController.text.trim(),
         location: _locationController.text.trim(),
         tagId: _selectedTagId!,
+        imageFile: _selectedImage,
       );
 
       if (mounted) {
@@ -141,6 +173,110 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 return null;
               },
               maxLength: 100,
+            ),
+            const SizedBox(height: 16),
+
+            // Image upload section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  if (_selectedImage != null) ...[
+                    // Image preview
+                    Stack(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              _selectedImage!,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        // Remove image button
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: GestureDetector(
+                            onTap: _removeImage,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    // Image picker button
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        width: double.infinity,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            style: BorderStyle.solid,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate,
+                              size: 48,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tap to add image',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_selectedImage != null) ...[
+                    // Change image button
+                    OutlinedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.image),
+                      label: const Text('Change Image'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 

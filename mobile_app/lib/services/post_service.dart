@@ -1,10 +1,35 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/post_model.dart';
-import 'tag_service.dart';
 
 class PostService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final TagService _tagService = TagService();
+
+  // Upload image to Supabase Storage
+  Future<String?> uploadImage(File imageFile) async {
+    try {
+      final String fileName =
+          'post_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final String filePath = fileName;
+
+      await _supabase.storage
+          .from('post-images')
+          .upload(
+            filePath,
+            imageFile,
+            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          );
+
+      final String imageUrl = _supabase.storage
+          .from('post-images')
+          .getPublicUrl(filePath);
+
+      return imageUrl;
+    } catch (e) {
+      print('Error uploading image: $e');
+      return null;
+    }
+  }
 
   // Create a new post
   Future<PostModel> createPost({
@@ -13,8 +38,14 @@ class PostService {
     required String description,
     required String location,
     required String tagId,
+    File? imageFile,
   }) async {
     try {
+      String? imageUrl;
+      if (imageFile != null) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
       final response = await _supabase
           .from('posts')
           .insert({
@@ -23,6 +54,7 @@ class PostService {
             'description': description,
             'location': location,
             'tag_id': tagId,
+            'image_url': imageUrl,
             'likes': 0,
             'created_at': DateTime.now().toIso8601String(),
           })
