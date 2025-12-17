@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { router as apiRouter } from './routes';
 
 dotenv.config();
 
@@ -14,13 +15,12 @@ app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Basic routes
+// API routes
+app.use('/api', apiRouter);
+
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
-});
-
-app.get('/api', (req, res) => {
-  res.json({ message: 'Welcome to Hamro Chautari API' });
 });
 
 // Start server
