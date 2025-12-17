@@ -42,6 +42,28 @@ class MyApp extends StatelessWidget {
             }
           },
         ),
+        onGenerateRoute: (settings) {
+          switch (settings.name) {
+            case '/':
+            case '/login':
+              return MaterialPageRoute(
+                builder: (context) => const LoginScreen(),
+              );
+            case '/register':
+              return MaterialPageRoute(
+                builder: (context) => const RegisterScreen(),
+              );
+            case '/home':
+              return MaterialPageRoute(
+                builder: (context) => const HomeScreen(),
+              );
+            default:
+              // Handle OAuth callback and any unknown routes
+              return MaterialPageRoute(
+                builder: (context) => const LoginScreen(),
+              );
+          }
+        },
         routes: {
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),

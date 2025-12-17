@@ -44,9 +44,7 @@ class AuthService {
     try {
       final response = await _supabase.auth.signInWithOAuth(
         supabase.OAuthProvider.google,
-        redirectTo: kIsWeb
-            ? null
-            : 'com.example.hamro_chautari://login-callback',
+        redirectTo: kIsWeb ? 'https://olxtmubvfqglxjisokcr.supabase.co' : null,
       );
       return response;
     } catch (e) {
