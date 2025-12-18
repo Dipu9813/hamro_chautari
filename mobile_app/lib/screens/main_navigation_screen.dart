@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
+import 'profile_screen.dart';
 import '../widgets/custom_app_bar.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -178,20 +179,6 @@ class BudgetScreen extends StatelessWidget {
       appBar: const CustomAppBar(title: 'Budget'),
       body: const Center(
         child: Text('Budget Screen', style: TextStyle(fontSize: 24)),
-      ),
-    );
-  }
-}
-
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const CustomAppBar(title: 'Profile'),
-      body: const Center(
-        child: Text('Profile Screen', style: TextStyle(fontSize: 24)),
       ),
     );
   }

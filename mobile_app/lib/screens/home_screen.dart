@@ -5,6 +5,7 @@ import '../models/post_model.dart';
 import '../services/post_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'create_post_screen.dart';
+import 'profile_screen.dart';
 import '../models/comment_model.dart';
 import '../services/auth_service.dart';
 
@@ -21,6 +22,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   List<PostModel> _posts = [];
   bool _isLoading = true;
+
+  void _signOut() async {
+    await _authService.signOut();
+    if (mounted) {
+      Navigator.of(context).pushReplacementNamed('/login');
+    }
+  }
 
   @override
   void initState() {
@@ -270,9 +278,6 @@ class _PostCardState extends State<PostCard> {
   Future<void> _handleLike() async {
     final user = _authService.currentUser;
     if (user == null || isProcessingLike) {
-      print(
-        '🚫 Like blocked - user: ${user != null}, processing: $isProcessingLike',
-      );
       return;
     }
 
@@ -284,16 +289,11 @@ class _PostCardState extends State<PostCard> {
     }
 
     try {
-      print('👆 User tapped like button - current state: $hasLiked');
-
       // Toggle like in database and get new state
       final newLikeState = await _postService.toggleLike(
         widget.post.id,
         user.id,
       );
-
-      print('✅ Database operation completed - new state: $newLikeState');
-
       // Update UI with new state
       if (mounted) {
         setState(() {

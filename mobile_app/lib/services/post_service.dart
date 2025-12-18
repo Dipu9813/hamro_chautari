@@ -111,7 +111,7 @@ class PostService {
       if (currentUser == null) {
         throw Exception('User not authenticated');
       }
-      
+
       // Check if user already liked this post
       final existingLike = await _supabase
           .from('post_likes')
