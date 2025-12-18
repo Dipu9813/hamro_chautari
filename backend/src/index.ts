@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { adminLogin, verifyAdminToken, getAdminProfile } from './controllers/adminController';
 
 dotenv.config();
 
@@ -13,6 +14,10 @@ app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Admin routes
+app.post('/api/admin-login', adminLogin);
+app.get('/api/admin/profile', verifyAdminToken, getAdminProfile);
 
 // Basic routes
 app.get('/health', (req, res) => {

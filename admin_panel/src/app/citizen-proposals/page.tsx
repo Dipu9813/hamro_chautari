@@ -349,7 +349,7 @@ export default function CitizenProposals() {
                     disabled={submitting}
                     className="flex items-center gap-2 px-4 py-2 bg-[#2D3F7B] text-white rounded-lg hover:bg-[#19295C] transition"
                   >
-                    {submitting ? 'Submitting...' : 'Submit for Review'}
+                    {submitting ? 'Submitting...' : 'Submit for Voting'}
                   </button>
                 </div>
               </div>
