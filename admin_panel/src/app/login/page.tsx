@@ -15,19 +15,40 @@ export default function LoginPage() {
   const HARDCODED_EMAIL = 'admin@example.com';
   const HARDCODED_PASSWORD = 'password123';
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Show animation overlay, then navigate to dashboard
-    setShowAnimation(true);
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 1800);
+    setError('');
+    
+    try {
+      const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_URL + '/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      const result = await res.json();
+      
+      if (!res.ok) {
+        setError(result.error || 'Login failed');
+        return;
+      }
+
+      // Store admin token and data in localStorage
+      localStorage.setItem('adminToken', result.token);
+      localStorage.setItem('adminData', JSON.stringify(result.admin));
+      
+      setShowAnimation(true);
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1800);
+    } catch (error) {
+      setError('Network error. Please check if the backend server is running.');
+    }
   };
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
-    // For demo, accept any signup and redirect
-    router.push('/dashboard');
+    setError('Admin sign up is not available. Please contact your administrator.');
   };
 
   return (

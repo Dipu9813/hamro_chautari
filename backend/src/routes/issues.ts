@@ -38,7 +38,7 @@ router.get("/issues", async (req: Request, res: Response) => {
         created_at,
         user_id,
         tag_id,
-        tags(id, name, weight)
+        image_url
       `
       )
       .order("created_at", { ascending: false });
@@ -60,6 +60,25 @@ router.get("/issues", async (req: Request, res: Response) => {
       return res.json([]);
     }
 
+    // Fetch all unique tags
+    const tagIds = [...new Set(posts.map((p: any) => p.tag_id).filter(Boolean))];
+    let tagsMap: { [key: string]: string } = {};
+    
+    if (tagIds.length > 0) {
+      const { data: tags, error: tagsError } = await supabase
+        .from("tags")
+        .select("id, name")
+        .in("id", tagIds);
+
+      if (!tagsError && tags) {
+        tagsMap = tags.reduce((acc: any, tag: any) => {
+          acc[tag.id] = tag.name;
+          return acc;
+        }, {});
+        console.log("✅ Fetched tags:", tagsMap);
+      }
+    }
+
     console.log("🔄 Calculating priority scores for each post...");
 
     // Calculate priority score for each post
@@ -73,14 +92,15 @@ router.get("/issues", async (req: Request, res: Response) => {
 
           const commentCount = post.comments_count || 0;
           const likesCount = post.likes_count || 0;
+          const tagName = post.tag_id ? tagsMap[post.tag_id] || "Other" : "Other";
 
           const mappedPost = {
             id: post.id,
             image:
-              "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=80&h=80&fit=crop",
+              post.image_url || "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=80&h=80&fit=crop",
             title: post.title,
             location: post.location,
-            category: post.tags?.[0]?.name || "Other",
+            category: tagName,
             categoryColor: "text-blue-700",
             priority: Math.round(priorityScore),
             status: "Pending",
@@ -147,7 +167,6 @@ router.get("/issues/:id", async (req: Request, res: Response) => {
         user_id,
         tag_id,
         image_url,
-        tags(id, name, weight),
         post_comments(
           id,
           content,
@@ -162,6 +181,20 @@ router.get("/issues/:id", async (req: Request, res: Response) => {
 
     if (postError) throw postError;
 
+    // Fetch tag name using tag_id
+    let tagName = "Other";
+    if (post.tag_id) {
+      const { data: tag, error: tagError } = await supabase
+        .from("tags")
+        .select("name")
+        .eq("id", post.tag_id)
+        .single();
+
+      if (!tagError && tag) {
+        tagName = tag.name;
+      }
+    }
+
     const priorityScore = await calculatePriorityScore(id);
     const commentCount = post.comments_count || 0;
     const likesCount = post.likes_count || 0;
@@ -173,7 +206,7 @@ router.get("/issues/:id", async (req: Request, res: Response) => {
         "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=80&h=80&fit=crop",
       title: post.title,
       location: post.location,
-      category: post.tags?.[0]?.name || "Other",
+      category: tagName,
       categoryColor: "text-blue-700",
       priority: Math.round(priorityScore),
       status: "Pending",
