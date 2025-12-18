@@ -5,6 +5,8 @@ import '../models/post_model.dart';
 import '../services/post_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'create_post_screen.dart';
+import '../models/comment_model.dart';
+import '../services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final PostService _postService = PostService();
   final ImagePicker _picker = ImagePicker();
+  final AuthService _authService = AuthService();
   List<PostModel> _posts = [];
   bool _isLoading = true;
 
@@ -194,8 +197,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               final post = _posts[index];
                               return PostCard(
                                 post: post,
-                                onLike: () async {
-                                  await _postService.likePost(post.id);
+                                onLike: () {
+                                  // Refresh posts to sync with database
                                   _loadPosts();
                                 },
                               );
@@ -209,11 +212,159 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final PostModel post;
   final VoidCallback onLike;
 
   const PostCard({super.key, required this.post, required this.onLike});
+
+  @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  late int likeCount;
+  late int commentCount;
+  bool hasLiked = false;
+  bool isProcessingLike = false;
+  List<CommentModel> comments = [];
+  bool loadingComments = false;
+  bool showCommentInput = false;
+  final _commentController = TextEditingController();
+  final PostService _postService = PostService();
+  final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    likeCount = widget.post.likes;
+    commentCount = widget.post.commentsCount;
+    _checkIfLiked();
+    _fetchComments();
+  }
+
+  Future<void> _checkIfLiked() async {
+    final user = _authService.currentUser;
+    if (user != null && !isProcessingLike) {
+      hasLiked = await _postService.hasUserLiked(widget.post.id, user.id);
+      if (mounted && !isProcessingLike) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _fetchComments() async {
+    if (mounted) {
+      setState(() {
+        loadingComments = true;
+      });
+    }
+    comments = await _postService.getComments(widget.post.id);
+    if (mounted) {
+      setState(() {
+        loadingComments = false;
+      });
+    }
+  }
+
+  Future<void> _handleLike() async {
+    final user = _authService.currentUser;
+    if (user == null || isProcessingLike) {
+      print(
+        '🚫 Like blocked - user: ${user != null}, processing: $isProcessingLike',
+      );
+      return;
+    }
+
+    // Prevent double-taps with processing flag
+    if (mounted) {
+      setState(() {
+        isProcessingLike = true;
+      });
+    }
+
+    try {
+      print('👆 User tapped like button - current state: $hasLiked');
+
+      // Toggle like in database and get new state
+      final newLikeState = await _postService.toggleLike(
+        widget.post.id,
+        user.id,
+      );
+
+      print('✅ Database operation completed - new state: $newLikeState');
+
+      // Update UI with new state
+      if (mounted) {
+        setState(() {
+          hasLiked = newLikeState;
+          // Update count based on the toggle
+          if (newLikeState) {
+            likeCount++;
+          } else {
+            likeCount = likeCount > 0 ? likeCount - 1 : 0;
+          }
+        });
+      }
+
+      // Delayed refresh to ensure database consistency
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          widget.onLike();
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error updating like: $e')));
+      }
+    } finally {
+      // Always reset processing flag
+      if (mounted) {
+        setState(() {
+          isProcessingLike = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _addComment() async {
+    final user = _authService.currentUser;
+    if (user == null || _commentController.text.trim().isEmpty) return;
+
+    try {
+      await _postService.addComment(
+        postId: widget.post.id,
+        userId: user.id,
+        comment: _commentController.text.trim(),
+      );
+
+      _commentController.clear();
+      await _fetchComments();
+
+      if (mounted) {
+        setState(() {
+          commentCount++;
+        });
+      }
+
+      // Call parent to refresh posts from database
+      widget.onLike();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error adding comment: $e')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -249,10 +400,10 @@ class PostCard extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: post.userPhotoUrl != null
+                child: widget.post.userPhotoUrl != null
                     ? ClipOval(
                         child: Image.network(
-                          post.userPhotoUrl!,
+                          widget.post.userPhotoUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return const Icon(
@@ -275,14 +426,15 @@ class PostCard extends StatelessWidget {
                       text: TextSpan(
                         children: [
                           TextSpan(
-                            text: post.userDisplayName ?? 'Anonymous User',
+                            text:
+                                widget.post.userDisplayName ?? 'Anonymous User',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1a1a1a),
                             ),
                           ),
-                          if (post.location.isNotEmpty) ...[
+                          if (widget.post.location.isNotEmpty) ...[
                             const TextSpan(
                               text: ' is feeling angry in ',
                               style: TextStyle(
@@ -291,7 +443,7 @@ class PostCard extends StatelessWidget {
                               ),
                             ),
                             TextSpan(
-                              text: post.location,
+                              text: widget.post.location,
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -304,7 +456,7 @@ class PostCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _formatDate(post.createdAt),
+                      _formatDate(widget.post.createdAt),
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF999999),
@@ -333,7 +485,7 @@ class PostCard extends StatelessWidget {
 
           // Post title
           Text(
-            post.title,
+            widget.post.title,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -344,7 +496,7 @@ class PostCard extends StatelessWidget {
 
           // Post description
           Text(
-            post.description,
+            widget.post.description,
             style: const TextStyle(
               fontSize: 15,
               color: Color(0xFF333333),
@@ -354,7 +506,8 @@ class PostCard extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Post image display
-          if (post.imageUrl != null && post.imageUrl!.isNotEmpty) ...[
+          if (widget.post.imageUrl != null &&
+              widget.post.imageUrl!.isNotEmpty) ...[
             Container(
               width: double.infinity,
               height: 200,
@@ -364,7 +517,7 @@ class PostCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
                 child: Image.network(
-                  post.imageUrl!,
+                  widget.post.imageUrl!,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
@@ -391,7 +544,7 @@ class PostCard extends StatelessWidget {
 
           // Likes count
           Text(
-            'You + ${post.likes + 429} others',
+            '$likeCount likes',
             style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
           ),
           const SizedBox(height: 12),
@@ -400,44 +553,69 @@ class PostCard extends StatelessWidget {
           Row(
             children: [
               // Like button
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2E4F99),
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.thumb_up, color: Colors.white, size: 16),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Like',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+              GestureDetector(
+                onTap: isProcessingLike ? null : _handleLike,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isProcessingLike
+                        ? Colors.grey.shade300
+                        : hasLiked
+                        ? const Color(0xFF2E4F99)
+                        : Colors.transparent,
+                    border: hasLiked || isProcessingLike
+                        ? null
+                        : Border.all(color: const Color(0xFF2E4F99)),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.thumb_up,
+                        color: hasLiked
+                            ? Colors.white
+                            : const Color(0xFF2E4F99),
+                        size: 16,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Text(
+                        hasLiked ? 'Liked' : 'Like',
+                        style: TextStyle(
+                          color: hasLiked
+                              ? Colors.white
+                              : const Color(0xFF2E4F99),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               // Comment button
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F0FF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.chat_bubble_outline,
-                  color: Color(0xFF2E4F99),
-                  size: 18,
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    showCommentInput = !showCommentInput;
+                  });
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F0FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mode_comment_outlined,
+                    color: Color(0xFF2E4F99),
+                    size: 20,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -450,123 +628,124 @@ class PostCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.share,
+                  Icons.send_outlined,
                   color: Color(0xFF2E4F99),
-                  size: 18,
+                  size: 20,
                 ),
               ),
               const Spacer(),
               // Comments and shares count
               Text(
-                '12 comments,   48 shares',
+                '$commentCount comments',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Comment section
-          Container(
-            padding: const EdgeInsets.only(top: 12),
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Color(0xFFE0E0E0), width: 0.5),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Commenter avatar
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Colors.green, Colors.teal],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+          // Comments section
+          if (loadingComments)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            for (final comment in comments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Colors.green, Colors.teal],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: comment.userPhotoUrl != null
+                          ? ClipOval(
+                              child: Image.network(
+                                comment.userPhotoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 20,
+                                  );
+                                },
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                     ),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Comment content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Dipesh Singh',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1a1a1a),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'I completely agree! I almost had an accident last week because of these potholes.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF333333),
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Like',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF666666),
-                              fontWeight: FontWeight.w500,
+                          Text(
+                            comment.userDisplayName ?? 'User',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1a1a1a),
                             ),
                           ),
-                          const SizedBox(width: 20),
-                          const Text(
-                            'Reply',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF666666),
-                              fontWeight: FontWeight.w500,
+                          const SizedBox(height: 4),
+                          Text(
+                            comment.comment,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF333333),
+                              height: 1.3,
                             ),
                           ),
-                          const SizedBox(width: 20),
-                          const Text(
-                            '2m',
-                            style: TextStyle(
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDate(comment.createdAt),
+                            style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFF999999),
                             ),
                           ),
                         ],
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          // Add comment input (only show when comment icon is clicked)
+          if (showCommentInput) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _commentController,
+                    decoration: const InputDecoration(
+                      hintText: 'Add a comment...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
                   ),
                 ),
-                // Comment menu
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F0FF),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.more_vert,
-                    color: Color(0xFF2E4F99),
-                    size: 16,
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Color(0xFF2E4F99)),
+                  onPressed: _addComment,
                 ),
               ],
             ),
-          ),
+          ],
         ],
       ),
     );
